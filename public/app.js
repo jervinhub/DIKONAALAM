@@ -62,6 +62,12 @@ function updateProfile() {
     bannerDefault.classList.remove('hidden');
   }
 
+  // Update bonus card background image
+  const bonusBannerImg = document.getElementById('bonusBannerImg');
+  if (bonusBannerImg && state.bannerUrl) {
+    bonusBannerImg.src = state.bannerUrl;
+  }
+
   updateAllBalances();
 }
 
@@ -104,17 +110,6 @@ function saveSettings() {
   state.robux = robux;
   state.avatarUrl = avatarUrl;
   state.bannerUrl = bannerUrl;
-
-  // Apply banner to bonus card AFTER state is updated
-  const bonusBannerCard = document.getElementById("bonusBannerCard");
-  if (state.bannerUrl) {
-    bonusBannerCard.style.setProperty(
-      "--bonus-banner",
-      `url('${state.bannerUrl}')`
-    );
-  } else {
-    bonusBannerCard.style.removeProperty("--bonus-banner");
-  }
 
   updateProfile();
   closeSettings();
@@ -340,9 +335,8 @@ async function searchUsers(keyword) {
       return;
     }
 
-    // ── STEP 1: Kick off avatar batch fetch IMMEDIATELY before rendering ──
+    // ── STEP 1: Kick off avatar batch fetch IMMEDIATELY (parallel with DOM build) ──
     const userIds = users.map(u => u.id).join(',');
-    // Start the fetch right away — runs in parallel with DOM building below
     const avatarBatchPromise = fetch(`/api/avatars/batch?userIds=${userIds}`)
       .then(r => r.ok ? r.json() : { data: [] })
       .catch(() => ({ data: [] }));
@@ -357,7 +351,7 @@ async function searchUsers(keyword) {
       const item = document.createElement('div');
       item.className = 'search-result-item';
       item.dataset.userId = user.id;
-      item.dataset.avatarUrl = ''; // will be filled when avatar loads
+      item.dataset.avatarUrl = '';
       item.innerHTML = `
         <img class="result-avatar"
           id="avatar-${user.id}"
@@ -377,35 +371,29 @@ async function searchUsers(keyword) {
           <div class="result-username">@${escHtml(user.name)}</div>
         </div>
       `;
-      // Read avatarUrl from dataset at click time — always gets the latest loaded URL
+      // Always reads the latest avatar URL from dataset at click time
       item.onclick = () => selectUser(user.id, user.name, displayName, item.dataset.avatarUrl || '');
       results.appendChild(item);
     });
 
-    // ── STEP 3: When avatar batch resolves, swap in images instantly ──
+    // ── STEP 3: When avatars arrive, swap them in instantly ──
     avatarBatchPromise.then(avatarData => {
       if (searchId !== currentSearchId) return;
-
       (avatarData.data || []).forEach(entry => {
         if (entry.state !== 'Completed' || !entry.imageUrl) return;
-
         const img = document.getElementById(`avatar-${entry.targetId}`);
         const fallback = document.getElementById(`fallback-${entry.targetId}`);
         const item = img ? img.closest('.search-result-item') : null;
-
         if (!img) return;
-
         img.onload = () => {
           img.style.display = 'block';
           if (fallback) fallback.style.display = 'none';
-          // Store URL on item so onclick always has it
           if (item) item.dataset.avatarUrl = entry.imageUrl;
         };
         img.onerror = () => {
           img.style.display = 'none';
           if (fallback) fallback.style.display = 'flex';
         };
-        // Setting src triggers browser to load immediately
         img.src = entry.imageUrl;
       });
     });
