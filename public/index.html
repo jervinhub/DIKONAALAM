@@ -275,17 +275,20 @@
       <div class="bonus-item-section">
         <h3 class="section-title">Bonus item we picked for you</h3>
         <div class="bonus-card" id="bonusBannerCard">
-          <div class="bonus-left">
-            <div class="bonus-icon">
-              <img src="assets/banner.png" alt="x2" onerror="this.outerHTML='<div class=bonus-icon-fallback>x2</div>'" />
+          <!-- Background image fills the whole card -->
+          <img id="bonusBannerImg" class="bonus-bg-img" src="assets/banner.png" alt="" />
+          <!-- Content overlaid on top -->
+          <div class="bonus-overlay">
+            <div class="bonus-left">
+              <div class="bonus-icon">
+                <img src="assets/robux-icon.png" class="bonus-icon-img" alt="" onerror="this.style.display='none'" />
+                <span class="bonus-x2">x2</span>
+              </div>
+              <div class="bonus-info">
+                <div class="bonus-name">Steal a Brainrot <span class="info-icon">&#9432;</span></div>
+                <div class="bonus-sub">2x Money</div>
+              </div>
             </div>
-            <div class="bonus-info">
-              <div class="bonus-name">Steal a Brainrot <span class="info-icon">&#9432;</span></div>
-              <div class="bonus-sub">2x Money</div>
-            </div>
-          </div>
-          <div class="bonus-right">
-            <div class="game-preview-bg">Sammy's Base</div>
           </div>
         </div>
       </div>
