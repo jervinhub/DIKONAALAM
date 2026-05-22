@@ -318,77 +318,71 @@ function onSearchInput(val) {
 
 async function searchUsers(keyword) {
   const results = document.getElementById('searchResults');
-  const searchId = ++currentSearchId; // mark this search
+  const searchId = ++currentSearchId;
 
   try {
     const res = await fetch(`/api/users/search?username=${encodeURIComponent(keyword)}`);
-    if (searchId !== currentSearchId) return; // stale, discard
+    if (searchId !== currentSearchId) return;
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const users = data.data || [];
+    const allUsers = data.data || [];
 
     if (searchId !== currentSearchId) return;
 
-    if (!users.length) {
+    if (!allUsers.length) {
       results.innerHTML = '<div class="search-loading">No users found.</div>';
       return;
     }
 
-    // ── STEP 1: Kick off avatar batch fetch IMMEDIATELY (parallel with DOM build) ──
-    const userIds = users.map(u => u.id).join(',');
-    const avatarBatchPromise = fetch(`/api/avatars/batch?userIds=${userIds}`)
-      .then(r => r.ok ? r.json() : { data: [] })
-      .catch(() => ({ data: [] }));
+    // ── Only show the TOP 1 result so the avatar loads fast ──
+    const user = allUsers[0];
+    const displayName = user.displayName || user.name;
+    const initial = (displayName[0] || '?').toUpperCase();
 
-    // ── STEP 2: Render users with letter fallback avatars ──
+    // Render immediately with letter fallback
     results.innerHTML = '';
+    const item = document.createElement('div');
+    item.className = 'search-result-item';
+    item.dataset.userId = user.id;
+    item.dataset.avatarUrl = '';
+    item.innerHTML = `
+      <img class="result-avatar"
+        id="avatar-${user.id}"
+        loading="eager"
+        decoding="async"
+        src=""
+        alt=""
+        style="display:none"
+        onerror="this.style.display='none';document.getElementById('fallback-${user.id}').style.display='flex';" />
+      <div class="result-avatar-fallback" id="fallback-${user.id}"
+        style="display:flex;width:36px;height:36px;border-radius:50%;background:#2e2e2e;
+               align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">
+        ${initial}
+      </div>
+      <div class="result-info">
+        <div class="result-display-name">${escHtml(displayName)}</div>
+        <div class="result-username">@${escHtml(user.name)}</div>
+      </div>
+    `;
+    item.onclick = () => selectUser(user.id, user.name, displayName, item.dataset.avatarUrl || '');
+    results.appendChild(item);
 
-    users.forEach(user => {
-      const displayName = user.displayName || user.name;
-      const initial = (displayName[0] || '?').toUpperCase();
-
-      const item = document.createElement('div');
-      item.className = 'search-result-item';
-      item.dataset.userId = user.id;
-      item.dataset.avatarUrl = '';
-      item.innerHTML = `
-        <img class="result-avatar"
-          id="avatar-${user.id}"
-          loading="eager"
-          decoding="async"
-          src=""
-          alt=""
-          style="display:none"
-          onerror="this.style.display='none';document.getElementById('fallback-${user.id}').style.display='flex';" />
-        <div class="result-avatar-fallback" id="fallback-${user.id}"
-          style="display:flex;width:36px;height:36px;border-radius:50%;background:#2e2e2e;
-                 align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">
-          ${initial}
-        </div>
-        <div class="result-info">
-          <div class="result-display-name">${escHtml(displayName)}</div>
-          <div class="result-username">@${escHtml(user.name)}</div>
-        </div>
-      `;
-      // Always reads the latest avatar URL from dataset at click time
-      item.onclick = () => selectUser(user.id, user.name, displayName, item.dataset.avatarUrl || '');
-      results.appendChild(item);
-    });
-
-    // ── STEP 3: When avatars arrive, swap them in instantly ──
-    avatarBatchPromise.then(avatarData => {
-      if (searchId !== currentSearchId) return;
-      (avatarData.data || []).forEach(entry => {
-        if (entry.state !== 'Completed' || !entry.imageUrl) return;
-        const img = document.getElementById(`avatar-${entry.targetId}`);
-        const fallback = document.getElementById(`fallback-${entry.targetId}`);
-        const item = img ? img.closest('.search-result-item') : null;
+    // ── Fetch just this one user's avatar directly ──
+    fetch(`/api/avatar/${user.id}`)
+      .then(r => r.ok ? r.json() : { data: [] })
+      .catch(() => ({ data: [] }))
+      .then(avatarData => {
+        if (searchId !== currentSearchId) return;
+        const entry = (avatarData.data || [])[0];
+        if (!entry || entry.state !== 'Completed' || !entry.imageUrl) return;
+        const img = document.getElementById(`avatar-${user.id}`);
+        const fallback = document.getElementById(`fallback-${user.id}`);
         if (!img) return;
         img.onload = () => {
           img.style.display = 'block';
           if (fallback) fallback.style.display = 'none';
-          if (item) item.dataset.avatarUrl = entry.imageUrl;
+          item.dataset.avatarUrl = entry.imageUrl;
         };
         img.onerror = () => {
           img.style.display = 'none';
@@ -396,43 +390,12 @@ async function searchUsers(keyword) {
         };
         img.src = entry.imageUrl;
       });
-    });
+
   } catch (err) {
     if (searchId !== currentSearchId) return;
-
-    // fallback users for smoother search
-    const fallbackUsers = [
-      {id:1,name:keyword,displayName:keyword},
-      {id:2,name:keyword + '_official',displayName:keyword + ' Official'},
-      {id:3,name:'real_' + keyword,displayName:'Real ' + keyword}
-    ];
-
-    results.innerHTML = '';
-
-    fallbackUsers.forEach(user => {
-      const item = document.createElement('div');
-      item.className = 'search-result-item';
-
-      item.innerHTML = `
-        <div class="result-avatar-fallback"
-          style="display:flex;width:36px;height:36px;border-radius:50%;background:#2e2e2e;
-          align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">
-          ${(user.displayName[0] || '?').toUpperCase()}
-        </div>
-
-        <div class="result-info">
-          <div class="result-display-name">${escHtml(user.displayName)}</div>
-          <div class="result-username">@${escHtml(user.name)}</div>
-        </div>
-      `;
-
-      item.onclick = () => selectUser(user.id, user.name, user.displayName, '');
-      results.appendChild(item);
-    });
-
+    results.innerHTML = '<div class="search-loading">Could not reach Roblox. Check your connection.</div>';
     console.error('searchUsers error:', err);
   }
-
 }
 function selectUser(id, username, displayName, avatarUrl) {
   sendState.recipientId = id;
