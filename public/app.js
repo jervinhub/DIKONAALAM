@@ -62,7 +62,6 @@ function updateProfile() {
     bannerDefault.classList.remove('hidden');
   }
 
-  // Update bonus card background image
   const bonusBannerImg = document.getElementById('bonusBannerImg');
   if (bonusBannerImg && state.bannerUrl) {
     bonusBannerImg.src = state.bannerUrl;
@@ -152,7 +151,7 @@ function goToStep3() {
     return;
   }
   if (sendState.amount > state.robux) {
-    alert('You don\'t have enough Robux!');
+    alert("You don't have enough Robux!");
     return;
   }
   showStep('sendStep3');
@@ -201,8 +200,6 @@ function selectAmount(n) {
   sendState.amount = n;
   updateAmountDisplay();
   setQuickActive(n);
-
-  // Hide custom input if visible
   document.getElementById('customAmountInput').classList.add('hidden');
   document.getElementById('amountDisplayRow').classList.remove('hidden');
 }
@@ -238,10 +235,9 @@ function blurCustomAmount() {
   setQuickActive(sendState.amount);
 }
 
-// Animate balance going down while sending
 function startSending() {
   const targetBalance = state.robux - sendState.amount;
-  const duration = 2200; // ms
+  const duration = 2200;
   const steps = 60;
   const stepDuration = duration / steps;
   const stepAmount = sendState.amount / steps;
@@ -257,7 +253,6 @@ function startSending() {
 
     if (step >= steps) {
       clearInterval(interval);
-      // Finalize
       state.robux = targetBalance;
       updateAllBalances();
       showSuccess();
@@ -268,32 +263,23 @@ function startSending() {
 function showSuccess() {
   showStep('sendStep4');
 
-  // success modal text
   const text = document.getElementById('successText');
   text.innerHTML = `You sent <strong>${fmt(sendState.amount)} Robux</strong> to @${sendState.recipientUsername}`;
 
-  // TOP NOTIFICATION
   document.getElementById('notifAmount').textContent = fmt(sendState.amount);
   document.getElementById('notifRecipient').textContent = '@' + sendState.recipientUsername;
 
   setTimeout(() => {
     closeSendModal();
-
     const notif = document.getElementById('topNotification');
     notif.classList.remove('hidden');
-
     if (notifTimeout) clearTimeout(notifTimeout);
-
-    notifTimeout = setTimeout(() => {
-      closeNotification();
-    }, 6000);
-
+    notifTimeout = setTimeout(() => closeNotification(), 6000);
   }, 1500);
 }
 
-
 // ── Roblox API: Search ─────────────────────────
-let currentSearchId = 0; // track stale searches
+let currentSearchId = 0;
 
 function onSearchInput(val) {
   clearTimeout(searchDebounce);
@@ -312,90 +298,91 @@ function onSearchInput(val) {
   results.classList.remove('hidden');
   results.innerHTML = '<div class="search-loading">Searching...</div>';
 
-  // Debounce reduced to 250ms for faster feel
-  searchDebounce = setTimeout(() => searchUsers(val), 120);
+  searchDebounce = setTimeout(() => searchUsers(val), 300);
 }
 
 async function searchUsers(keyword) {
   const results = document.getElementById('searchResults');
   const searchId = ++currentSearchId;
 
+  // ── 1. Search users ──
+  let users = [];
   try {
-    // ── Fetch users from Roblox ──
-    const res = await fetch(`/api/users/search?username=${encodeURIComponent(keyword)}`);
+    const res = await fetch('/api/users/search?username=' + encodeURIComponent(keyword));
     if (searchId !== currentSearchId) return;
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
     const data = await res.json();
-    if (searchId !== currentSearchId) return;
-
-    const allUsers = data.data || [];
-    if (!allUsers.length) {
-      results.innerHTML = '<div class="search-loading">No users found.</div>';
-      return;
-    }
-
-    // ── Only show TOP 1 result so avatar loads instantly ──
-    const user = allUsers[0];
-    const displayName = user.displayName || user.name;
-    const initial = (displayName[0] || '?').toUpperCase();
-    const uid = user.id;
-
-    // ── Render card immediately with letter fallback ──
-    results.innerHTML = `
-      <div class="search-result-item" id="result-item-${uid}">
-        <div class="result-avatar-fallback" id="fallback-${uid}"
-          style="display:flex;width:42px;height:42px;border-radius:50%;background:#2e2e2e;
-                 align-items:center;justify-content:center;font-size:16px;color:#aaa;flex-shrink:0;">
-          ${initial}
-        </div>
-        <img class="result-avatar" id="avatar-${uid}"
-          style="display:none;width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;"
-          alt="" />
-        <div class="result-info">
-          <div class="result-display-name">${escHtml(displayName)}</div>
-          <div class="result-username">@${escHtml(user.name)}</div>
-        </div>
-      </div>
-    `;
-
-    // Wire click — avatarUrl will be filled in once loaded
-    const item = document.getElementById(`result-item-${uid}`);
-    item.style.cursor = 'pointer';
-    item.dataset.avatarUrl = '';
-    item.onclick = () => selectUser(uid, user.name, displayName, item.dataset.avatarUrl || '');
-
-    // ── Fetch only this one user's avatar ──
-    fetch(`/api/avatar/${uid}`)
-      .then(r => r.ok ? r.json() : { data: [] })
-      .catch(() => ({ data: [] }))
-      .then(avatarData => {
-        if (searchId !== currentSearchId) return;
-        const entry = (avatarData.data || [])[0];
-        if (!entry || entry.state !== 'Completed' || !entry.imageUrl) return;
-
-        const img = document.getElementById(`avatar-${uid}`);
-        const fb  = document.getElementById(`fallback-${uid}`);
-        if (!img) return;
-
-        img.onload = () => {
-          img.style.display = 'block';
-          if (fb) fb.style.display = 'none';
-          if (item) item.dataset.avatarUrl = entry.imageUrl;
-        };
-        img.onerror = () => {
-          img.style.display = 'none';
-          if (fb) fb.style.display = 'flex';
-        };
-        img.src = entry.imageUrl;
-      });
-
+    users = (data && data.data) ? data.data : [];
   } catch (err) {
+    console.error('Search error:', err);
+  }
+
+  if (searchId !== currentSearchId) return;
+
+  if (!users.length) {
+    results.innerHTML = '<div class="search-loading">No users found.</div>';
+    return;
+  }
+
+  // ── 2. Show top 1 user instantly with letter fallback ──
+  const user = users[0];
+  const displayName = user.displayName || user.name || keyword;
+  const initial = (displayName[0] || '?').toUpperCase();
+  const uid = user.id;
+
+  const item = document.createElement('div');
+  item.className = 'search-result-item';
+  item.dataset.avatarUrl = '';
+  item.style.cursor = 'pointer';
+
+  const fb = document.createElement('div');
+  fb.id = 'fallback-' + uid;
+  fb.style.cssText = 'display:flex;width:42px;height:42px;border-radius:50%;background:#353535;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:#ccc;flex-shrink:0;';
+  fb.textContent = initial;
+
+  const img = document.createElement('img');
+  img.id = 'avatar-' + uid;
+  img.style.cssText = 'display:none;width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;';
+  img.alt = '';
+
+  const info = document.createElement('div');
+  info.className = 'result-info';
+  info.innerHTML = '<div class="result-display-name">' + escHtml(displayName) + '</div><div class="result-username">@' + escHtml(user.name) + '</div>';
+
+  item.appendChild(fb);
+  item.appendChild(img);
+  item.appendChild(info);
+  item.onclick = function() {
+    selectUser(uid, user.name, displayName, item.dataset.avatarUrl || '');
+  };
+
+  results.innerHTML = '';
+  results.appendChild(item);
+
+  // ── 3. Fetch avatar for this user only ──
+  try {
+    const avatarRes = await fetch('/api/avatar/' + uid);
     if (searchId !== currentSearchId) return;
-    results.innerHTML = '<div class="search-loading">Search failed. Try again.</div>';
-    console.error('searchUsers error:', err);
+    const avatarData = await avatarRes.json();
+    const entries = avatarData && avatarData.data ? avatarData.data : [];
+    const entry = entries[0];
+    if (entry && entry.imageUrl) {
+      img.onload = function() {
+        img.style.display = 'block';
+        fb.style.display = 'none';
+        item.dataset.avatarUrl = entry.imageUrl;
+      };
+      img.onerror = function() {
+        img.style.display = 'none';
+        fb.style.display = 'flex';
+      };
+      img.src = entry.imageUrl;
+    }
+  } catch (err) {
+    console.error('Avatar error:', err);
+    // letter fallback stays — user can still click and send
   }
 }
+
 function selectUser(id, username, displayName, avatarUrl) {
   sendState.recipientId = id;
   sendState.recipientUsername = username;
