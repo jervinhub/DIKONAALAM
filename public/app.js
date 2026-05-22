@@ -321,79 +321,78 @@ async function searchUsers(keyword) {
   const searchId = ++currentSearchId;
 
   try {
+    // ── Fetch users from Roblox ──
     const res = await fetch(`/api/users/search?username=${encodeURIComponent(keyword)}`);
     if (searchId !== currentSearchId) return;
-
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const allUsers = data.data || [];
 
+    const data = await res.json();
     if (searchId !== currentSearchId) return;
 
+    const allUsers = data.data || [];
     if (!allUsers.length) {
       results.innerHTML = '<div class="search-loading">No users found.</div>';
       return;
     }
 
-    // ── Only show the TOP 1 result so the avatar loads fast ──
+    // ── Only show TOP 1 result so avatar loads instantly ──
     const user = allUsers[0];
     const displayName = user.displayName || user.name;
     const initial = (displayName[0] || '?').toUpperCase();
+    const uid = user.id;
 
-    // Render immediately with letter fallback
-    results.innerHTML = '';
-    const item = document.createElement('div');
-    item.className = 'search-result-item';
-    item.dataset.userId = user.id;
-    item.dataset.avatarUrl = '';
-    item.innerHTML = `
-      <img class="result-avatar"
-        id="avatar-${user.id}"
-        loading="eager"
-        decoding="async"
-        src=""
-        alt=""
-        style="display:none"
-        onerror="this.style.display='none';document.getElementById('fallback-${user.id}').style.display='flex';" />
-      <div class="result-avatar-fallback" id="fallback-${user.id}"
-        style="display:flex;width:36px;height:36px;border-radius:50%;background:#2e2e2e;
-               align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">
-        ${initial}
-      </div>
-      <div class="result-info">
-        <div class="result-display-name">${escHtml(displayName)}</div>
-        <div class="result-username">@${escHtml(user.name)}</div>
+    // ── Render card immediately with letter fallback ──
+    results.innerHTML = `
+      <div class="search-result-item" id="result-item-${uid}">
+        <div class="result-avatar-fallback" id="fallback-${uid}"
+          style="display:flex;width:42px;height:42px;border-radius:50%;background:#2e2e2e;
+                 align-items:center;justify-content:center;font-size:16px;color:#aaa;flex-shrink:0;">
+          ${initial}
+        </div>
+        <img class="result-avatar" id="avatar-${uid}"
+          style="display:none;width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;"
+          alt="" />
+        <div class="result-info">
+          <div class="result-display-name">${escHtml(displayName)}</div>
+          <div class="result-username">@${escHtml(user.name)}</div>
+        </div>
       </div>
     `;
-    item.onclick = () => selectUser(user.id, user.name, displayName, item.dataset.avatarUrl || '');
-    results.appendChild(item);
 
-    // ── Fetch just this one user's avatar directly ──
-    fetch(`/api/avatar/${user.id}`)
+    // Wire click — avatarUrl will be filled in once loaded
+    const item = document.getElementById(`result-item-${uid}`);
+    item.style.cursor = 'pointer';
+    item.dataset.avatarUrl = '';
+    item.onclick = () => selectUser(uid, user.name, displayName, item.dataset.avatarUrl || '');
+
+    // ── Fetch only this one user's avatar ──
+    fetch(`/api/avatar/${uid}`)
       .then(r => r.ok ? r.json() : { data: [] })
       .catch(() => ({ data: [] }))
       .then(avatarData => {
         if (searchId !== currentSearchId) return;
         const entry = (avatarData.data || [])[0];
         if (!entry || entry.state !== 'Completed' || !entry.imageUrl) return;
-        const img = document.getElementById(`avatar-${user.id}`);
-        const fallback = document.getElementById(`fallback-${user.id}`);
+
+        const img = document.getElementById(`avatar-${uid}`);
+        const fb  = document.getElementById(`fallback-${uid}`);
         if (!img) return;
+
         img.onload = () => {
           img.style.display = 'block';
-          if (fallback) fallback.style.display = 'none';
-          item.dataset.avatarUrl = entry.imageUrl;
+          if (fb) fb.style.display = 'none';
+          if (item) item.dataset.avatarUrl = entry.imageUrl;
         };
         img.onerror = () => {
           img.style.display = 'none';
-          if (fallback) fallback.style.display = 'flex';
+          if (fb) fb.style.display = 'flex';
         };
         img.src = entry.imageUrl;
       });
 
   } catch (err) {
     if (searchId !== currentSearchId) return;
-    results.innerHTML = '<div class="search-loading">Could not reach Roblox. Check your connection.</div>';
+    results.innerHTML = '<div class="search-loading">Search failed. Try again.</div>';
     console.error('searchUsers error:', err);
   }
 }
